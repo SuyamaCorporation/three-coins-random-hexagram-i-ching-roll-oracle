@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>易経六十四卦コインオラクル</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0d0a1a; }
+    .oracle-bg {
+      background: radial-gradient(ellipse at 50% 20%, #1a0d2e 0%, #0d0a1a 60%);
+    }
+    .parchment {
+      background: linear-gradient(135deg, #1a1008 0%, #221505 50%, #1a1008 100%);
+      border: 1px solid #5a3e10;
+    }
+    .coin-btn {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      font-size: 2rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 3px solid #d4a853;
+      background: radial-gradient(circle at 35% 35%, #f0c860, #8b6914);
+      display: flex; align-items: center; justify-content: center;
+      user-select: none;
+      box-shadow: 0 4px 15px rgba(212,168,83,0.3);
+    }
+    .coin-btn:hover:not(:disabled) {
+      transform: scale(1.1) rotate(10deg);
+      box-shadow: 0 8px 25px rgba(212,168,83,0.5);
+    }
+    .coin-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .coin-btn.casting {
+      animation: coinSpin 0.6s ease;
+    }
+    @keyframes coinSpin {
+      0% { transform: rotateY(0); }
+      50% { transform: rotateY(180deg); }
+      100% { transform: rotateY(360deg); }
+    }
+    .line-yang {
+      height: 12px; background: #d4a853;
+      margin: 4px 0; border-radius: 2px;
+    }
+    .line-yin {
+      height: 12px;
+      margin: 4px 0;
+      display: flex; gap: 8px;
+    }
+    .line-yin .half {
+      flex: 1; background: #d4a853; border-radius: 2px; height: 100%;
+    }
+    .line-changing .line-yang, .line-changing .half {
+      background: #ef4444;
+    }
+    .line-changing .mark {
+      color: #ef4444;
+      font-size: 0.65rem;
+      margin-left: 4px;
+    }
+    .hexagram-char {
+      font-size: 5rem;
+      line-height: 1;
+      text-shadow: 0 0 20px rgba(212,168,83,0.6);
+    }
+    .throw-result {
+      animation: throwIn 0.4s ease;
+    }
+    @keyframes throwIn {
+      from { opacity: 0; transform: translateY(-15px) scale(0.9); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .reveal-anim {
+      animation: reveal 0.8s ease;
+    }
+    @keyframes reveal {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .throw-history-line {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.8rem;
+    }
+    .coin-toss-mini {
+      display: inline-block;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 1px solid #d4a853;
+      text-align: center; line-height: 18px;
+      font-size: 0.7rem;
+    }
+  </style>
+</head>
+<body class="oracle-bg min-h-screen text-amber-100 p-4">
+
+<div class="max-w-3xl mx-auto">
+  <!-- Header -->
+  <header class="text-center mb-6 pt-4">
+    <h1 class="text-3xl md:text-4xl font-bold text-yellow-300 mb-1" style="font-family:Georgia,serif; text-shadow: 0 0 20px rgba(212,168,83,0.4)">
+      ☯ 易経六十四卦 I Ching Oracle ☯
+    </h1>
+    <p class="text-amber-500 text-sm">コイン3枚投げ・ランダム占いオラクル</p>
+  </header>
+
+  <!-- Instructions & Coin Throw -->
+  <div class="parchment rounded-2xl p-5 mb-5">
+    <div class="text-center mb-4">
+      <p class="text-amber-400 text-sm mb-1">
+        コインを6回投げて六爻を積み上げよ（1回目=第一爻 下から）
+      </p>
+      <p class="text-amber-700 text-xs">
+        表3枚=老陽(━━ 変) ／ 表2枚=少陽(━━) ／ 裏2枚=少陰(━ ━) ／ 裏3枚=老陰(━ ━ 変)
+      </p>
+    </div>
+
+    <!-- Throw Progress -->
+    <div class="flex items-center justify-center gap-2 mb-5">
+      <span class="text-amber-600 text-sm">第</span>
+      <span id="throwCount" class="text-yellow-300 text-2xl font-bold">1</span>
+      <span class="text-amber-600 text-sm">爻</span>
+      <span class="text-amber-800 text-sm ml-2">(残り <span id="remaining">6</span> 回)</span>
+    </div>
+
+    <!-- Three Coins Display -->
+    <div class="flex justify-center gap-6 mb-5" role="group" aria-label="3枚のコイン">
+      <div class="text-center">
+        <button class="coin-btn" id="castBtn"
+          aria-label="コイン3枚を投げる (クリックまたはEnterキー)">
+          🪙
+        </button>
+        <p class="text-xs text-amber-600 mt-2">クリックして投げる</p>
+      </div>
+    </div>
+
+    <!-- Throw Results History -->
+    <div id="throwHistory" class="space-y-2 min-h-8" aria-live="polite" aria-label="投げた結果の履歴">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+
+  <!-- Hexagram Display -->
+  <div id="hexagramPanel" class="hidden parchment rounded-2xl p-5 mb-5 reveal-anim" aria-live="polite">
+    <!-- Filled by JS -->
+  </div>
+
+  <!-- Changed Hexagram -->
+  <div id="changedPanel" class="hidden parchment rounded-2xl p-5 mb-5" aria-live="polite">
+    <!-- Filled by JS -->
+  </div>
+
+  <!-- Reset -->
+  <div class="text-center">
+    <button id="resetBtn"
+      class="bg-gray-800 hover:bg-gray-700 text-amber-300 px-6 py-3 rounded-xl transition-all focus:ring-2 focus:ring-amber-500"
+      aria-label="最初からやり直す">
+      🔄 新しい占い
+    </button>
+  </div>
+</div>
+
+<script>
+  // =====================
+  // HEXAGRAM DATA (all 64)
+  // Unicode hexagrams: ䷀ (U+4DC0) through ䷿ (U+4DFF)
+  // Order matches King Wen sequence
+  // =====================
+  const HEXAGRAMS = [
+    { num:1,  name:'乾',  reading:'けん',  en:'The Creative',    char:'☰', unicode:'䷀', summary:'天の創造力。強健・積極・始まり。大いなる力が前進する。', interpretation:'天の徳を体現し、正しい道を進む時。強い意志と行動で未来を切り開け。'},
+    { num:2,  name:'坤',  reading:'こん',  en:'The Receptive',   char:'☷', unicode:'䷁', summary:'大地の受容。柔順・忍耐・包容。静かに支える力。', interpretation:'受け入れることで大きな力を得る。今は従い、実行するときではない。'},
+    { num:3,  name:'屯',  reading:'ちゅん',en:'Difficulty at Beginning', char:'☵', unicode:'䷂', summary:'初めの困難。混乱の中に芽吹き。艱難の始まり。', interpretation:'困難な始まりだが諦めるな。助けを求め慎重に進め。'},
+    { num:4,  name:'蒙',  reading:'もう',  en:'Youthful Folly',  char:'☶', unicode:'䷃', summary:'幼稚な無知。教育・啓蒙の必要。師を求めよ。', interpretation:'学ぶ姿勢が必要。謙虚に師に従い、知識を深める時。'},
+    { num:5,  name:'需',  reading:'じゅ',  en:'Waiting',         char:'☵', unicode:'䷄', summary:'待機・養い。正しき時を待て。焦らず備えよ。', interpretation:'待つことが最善の策。正しい時機が来るまで準備を整えよ。'},
+    { num:6,  name:'訟',  reading:'しょう',en:'Conflict',        char:'☰', unicode:'䷅', summary:'争い・訴訟。対立・論争。慎重に妥協を探せ。', interpretation:'争いを避けよ。強引に進めば損害を招く。和解を模索せよ。'},
+    { num:7,  name:'師',  reading:'し',    en:'The Army',        char:'☷', unicode:'䷆', summary:'軍・組織。規律ある集団の力。指導者に従え。', interpretation:'組織的な行動が必要。有能な指導者の下で団結せよ。'},
+    { num:8,  name:'比',  reading:'ひ',    en:'Holding Together', char:'☵', unicode:'䷇', summary:'親和・協力。結束・団結。真の連帯を築け。', interpretation:'人々を結びつける時。誠実な絆を結び共に進め。'},
+    { num:9,  name:'小畜', reading:'しょうちく',en:'Small Taming', char:'☴', unicode:'䷈', summary:'小さな蓄積。制御・抑制。徐々に力を蓄えよ。', interpretation:'小さな力で大きなものを制する。忍耐と積み重ねが実を結ぶ。'},
+    { num:10, name:'履',  reading:'り',    en:'Treading',        char:'☰', unicode:'䷉', summary:'礼節・慎重。虎の尾を踏む。礼をもって進め。', interpretation:'危険な状況でも礼節を忘れずに進め。誠実さが守ってくれる。'},
+    { num:11, name:'泰',  reading:'たい',  en:'Peace',           char:'☷', unicode:'䷊', summary:'平和・繁栄。天地交わる吉兆。大いなる調和。', interpretation:'天地が調和し繁栄の時。今こそ大事業に取り組め。'},
+    { num:12, name:'否',  reading:'ひ',    en:'Standstill',      char:'☰', unicode:'䷋', summary:'停滞・閉塞。天地離れ悪の時。小人が跋扈する。', interpretation:'停滞の時。積極的な行動を避け、内に力を蓄えよ。'},
+    { num:13, name:'同人', reading:'どうじん',en:'Fellowship',   char:'☰', unicode:'䷌', summary:'同志・連帯。広い連携。皆と共に進め。', interpretation:'広く人と交わり、共通の目的のもとに団結する時。'},
+    { num:14, name:'大有', reading:'たいゆう',en:'Great Possessing', char:'☰', unicode:'䷍', summary:'大いなる所有。豊かさ・成功。徳をもって富を管理せよ。', interpretation:'豊かさと成功の時。傲慢にならず徳をもって行動せよ。'},
+    { num:15, name:'謙',  reading:'けん',  en:'Modesty',         char:'☷', unicode:'䷎', summary:'謙虚・謙遜。山が地の下に。真の謙虚さが吉。', interpretation:'謙虚な姿勢が全てを成功に導く。高みを望まず地道に歩め。'},
+    { num:16, name:'豫',  reading:'よ',    en:'Enthusiasm',      char:'☳', unicode:'䷏', summary:'歓喜・先取り。準備と熱意。大事業の始まり。', interpretation:'熱意と準備で道が開ける。楽観的に前進せよ。'},
+    { num:17, name:'随',  reading:'ずい',  en:'Following',       char:'☱', unicode:'䷐', summary:'従う・適応。時に従い変化する。柔軟に応じよ。', interpretation:'時の流れに従い柔軟に対応する時。固執せず変化を受け入れよ。'},
+    { num:18, name:'蠱',  reading:'こ',    en:'Decay',           char:'☶', unicode:'䷑', summary:'腐敗・修正。停滞と再生。問題を直視せよ。', interpretation:'腐敗した状況を修正する時。問題の根本に向き合い改革せよ。'},
+    { num:19, name:'臨',  reading:'りん',  en:'Approach',        char:'☷', unicode:'䷒', summary:'近づく・臨む。力が増す吉時。積極的に関与せよ。', interpretation:'力が高まり前進する時。機会を逃さず積極的に行動せよ。'},
+    { num:20, name:'観',  reading:'かん',  en:'Contemplation',   char:'☴', unicode:'䷓', summary:'観察・洞察。深く見つめ考えよ。範を示せ。', interpretation:'深く観察し内省する時。行動より先に状況を見極めよ。'},
+    { num:21, name:'噬嗑', reading:'ぜいこう',en:'Biting Through', char:'☳', unicode:'䷔', summary:'噛み通す・断行。障害を除去せよ。正義を貫け。', interpretation:'障害を除去する断行の時。優柔不断をやめ明確に決断せよ。'},
+    { num:22, name:'賁',  reading:'ひ',    en:'Grace',           char:'☶', unicode:'䷕', summary:'飾り・美。外見と内実。装飾は本質を超えられない。', interpretation:'美しい装飾も本質の補助に過ぎない。内面の充実を先にせよ。'},
+    { num:23, name:'剥',  reading:'はく',  en:'Splitting Apart', char:'☶', unicode:'䷖', summary:'崩壊・剥落。衰退の極み。じっとして嵐を待て。', interpretation:'崩壊の時。積極的な行動は避け、内面を守り嵐が過ぎるのを待て。'},
+    { num:24, name:'復',  reading:'ふく',  en:'Return',          char:'☷', unicode:'䷗', summary:'回帰・復活。一陽来復。新しい始まり。', interpretation:'転換点に来た。自然の法則に従い、新たな始まりを受け入れよ。'},
+    { num:25, name:'無妄', reading:'むもう',en:'Innocence',       char:'☰', unicode:'䷘', summary:'無邪気・誠実。天真爛漫。正道を守れ。', interpretation:'純粋な心で正道を歩め。打算や策略を捨て自然に行動せよ。'},
+    { num:26, name:'大畜', reading:'たいちく',en:'Great Taming', char:'☶', unicode:'䷙', summary:'大いなる蓄積。力の制御。蓄えられた大きな力。', interpretation:'大きな力が蓄えられた。今こそ大事業を行う時。'},
+    { num:27, name:'頤',  reading:'い',    en:'Nourishment',     char:'☶', unicode:'䷚', summary:'養い・口。食物と精神の栄養。慎重に養え。', interpretation:'何を摂取し何を生み出すかが重要。心身の養いを大切にせよ。'},
+    { num:28, name:'大過', reading:'たいか',en:'Great Exceeding', char:'☱', unicode:'䷛', summary:'過大・超越。限界を超えた重荷。危機の突破。', interpretation:'極度の重圧の時。非常手段も辞さず決断的に行動せよ。'},
+    { num:29, name:'坎',  reading:'かん',  en:'The Abysmal',     char:'☵', unicode:'䷜', summary:'深淵・危険。水の如く。艱難に誠実で進め。', interpretation:'深い危険の中にいる。誠実さと信念を保ち前進せよ。'},
+    { num:30, name:'離',  reading:'り',    en:'The Clinging',    char:'☲', unicode:'䷝', summary:'光明・炎。明知・洞察。正道を照らせ。', interpretation:'明るい知性で状況を照らせ。正しい価値に附着し進め。'},
+    { num:31, name:'咸',  reading:'かん',  en:'Influence',       char:'☱', unicode:'䷞', summary:'感応・影響。互いに感じ合う。開かれた心で交わる。', interpretation:'相互の感応の時。開かれた心で他者の影響を受け入れよ。'},
+    { num:32, name:'恒',  reading:'こう',  en:'Duration',        char:'☳', unicode:'䷟', summary:'持続・恒久。変わらぬ中心軸。着実に継続せよ。', interpretation:'変わらぬ原則を保ちながら持続する時。一貫性が成功を生む。'},
+    { num:33, name:'遯',  reading:'とん',  en:'Retreat',         char:'☰', unicode:'䷠', summary:'退却・遁世。賢明な後退。今は引くべき時。', interpretation:'賢明な退却の時。力を温存し再起の機を待て。'},
+    { num:34, name:'大壮', reading:'たいそう',en:'Great Power',  char:'☰', unicode:'䷡', summary:'大いなる力。強大な力の発現。しかし礼節を忘れるな。', interpretation:'大きな力を持つ時。しかし力のみに頼らず正道を保て。'},
+    { num:35, name:'晋',  reading:'しん',  en:'Progress',        char:'☲', unicode:'䷢', summary:'前進・昇進。太陽の如く昇る。大いに前進する時。', interpretation:'光明の中を前進する吉の時。積極的な行動が実を結ぶ。'},
+    { num:36, name:'明夷', reading:'めいい',en:'Darkening of Light', char:'☷', unicode:'䷣', summary:'暗黒・隠蔽。光が傷つく。内に光を保て。', interpretation:'暗い時代。内面の光を守り、賢明に隠れ力を蓄えよ。'},
+    { num:37, name:'家人', reading:'かじん',en:'The Family',     char:'☴', unicode:'䷤', summary:'家族・共同体。家庭の道。各自の役割を守れ。', interpretation:'家族や組織内の秩序を守る時。各自の役割と責任を大切にせよ。'},
+    { num:38, name:'睽',  reading:'き',    en:'Opposition',      char:'☲', unicode:'䷥', summary:'対立・相違。火と水の対立。小事は進み大事は控えよ。', interpretation:'対立の時。大事は控えて小事から調和を築いていけ。'},
+    { num:39, name:'蹇',  reading:'けん',  en:'Obstruction',     char:'☵', unicode:'䷦', summary:'障害・難関。進む道に水山。自己反省が打開する。', interpretation:'深刻な障害の時。外に解決を求めず自己を見つめ直せ。'},
+    { num:40, name:'解',  reading:'かい',  en:'Deliverance',     char:'☳', unicode:'䷧', summary:'解放・解決。障害が取り除かれる。すばやく行動せよ。', interpretation:'困難から解放される時。迅速に前進し新たな出発をせよ。'},
+    { num:41, name:'損',  reading:'そん',  en:'Decrease',        char:'☶', unicode:'䷨', summary:'減少・損失。下を減らし上を益す。誠実さで補え。', interpretation:'減少の時だが誠実さがあれば乗り越えられる。内面を磨け。'},
+    { num:42, name:'益',  reading:'えき',  en:'Increase',        char:'☴', unicode:'䷩', summary:'増益・利益。上を減らし下を益す。大いに進め。', interpretation:'増加と繁栄の時。大きな事業に取り組む好機。'},
+    { num:43, name:'夬',  reading:'かい',  en:'Breakthrough',    char:'☱', unicode:'䷪', summary:'決断・突破。悪を断ち切れ。毅然と宣言せよ。', interpretation:'決断の時。毅然として悪を断ち切り前進せよ。'},
+    { num:44, name:'姤',  reading:'こう',  en:'Coming to Meet',  char:'☰', unicode:'䷫', summary:'出会い・邂逅。陰が忍び込む。慎重に対処せよ。', interpretation:'予期せぬ出会いに注意。誘惑に負けず原則を守れ。'},
+    { num:45, name:'萃',  reading:'そい',  en:'Gathering',       char:'☱', unicode:'䷬', summary:'集結・集会。皆が集まる時。大いなる祀りを行え。', interpretation:'人々が集まる吉の時。共通の目標のもと団結せよ。'},
+    { num:46, name:'升',  reading:'しょう',en:'Pushing Upward',  char:'☷', unicode:'䷭', summary:'上昇・昇進。地中の木が伸びる。着実に昇れ。', interpretation:'着実な上昇の時。努力と忍耐で高みを目指せ。'},
+    { num:47, name:'困',  reading:'こん',  en:'Oppression',      char:'☱', unicode:'䷮', summary:'困難・窮乏。水なき沢。言葉よりも行動で示せ。', interpretation:'極度の困窮の時。言葉は通じない。強い意志と行動で乗り越えよ。'},
+    { num:48, name:'井',  reading:'せい',  en:'The Well',        char:'☵', unicode:'䷯', summary:'水井・根源。尽きない知恵の源泉。常に供給する。', interpretation:'尽きない源泉のように知恵と力を供給せよ。本質を磨き続けよ。'},
+    { num:49, name:'革',  reading:'かく',  en:'Revolution',      char:'☱', unicode:'䷰', summary:'革命・変革。旧きを革め新しくする。正しき変革を。', interpretation:'変革の時。旧習を打破し新たな秩序を築く好機。'},
+    { num:50, name:'鼎',  reading:'てい',  en:'The Cauldron',    char:'☲', unicode:'䷱', summary:'鼎・鋳造。賢者と王の出会い。文化と文明の発展。', interpretation:'高い文化と組織の発展の時。賢者を登用し知恵を集めよ。'},
+    { num:51, name:'震',  reading:'しん',  en:'The Arousing',    char:'☳', unicode:'䷲', summary:'雷・震動。衝撃と覚醒。恐れながらも前進せよ。', interpretation:'突然の衝撃が来る。恐れながらも自省し前進せよ。'},
+    { num:52, name:'艮',  reading:'ごん',  en:'Keeping Still',   char:'☶', unicode:'䷳', summary:'山・静止。動きを止める。今は瞑想と静観の時。', interpretation:'静止の時。動きを止め内省することで真実が見えてくる。'},
+    { num:53, name:'漸',  reading:'ぜん',  en:'Development',     char:'☴', unicode:'䷴', summary:'漸進・段階的発展。雁の渡りの如く。着実に進め。', interpretation:'着実な漸進の時。急がず着実に段階を踏んで進め。'},
+    { num:54, name:'帰妹', reading:'きまい',en:'The Marrying Maiden', char:'☳', unicode:'䷵', summary:'嫁ぐ・移行。動き始める関係。長続きする本物を選べ。', interpretation:'関係が動き出す時。しかし軽率に進まず長続きする絆を選べ。'},
+    { num:55, name:'豊',  reading:'ほう',  en:'Abundance',       char:'☳', unicode:'䷶', summary:'豊穣・充実。太陽の頂点。偉大な成功の絶頂。', interpretation:'最大の繁栄の時。しかし絶頂は長続きしない。徳を積み備えよ。'},
+    { num:56, name:'旅',  reading:'りょ',  en:'The Wanderer',    char:'☲', unicode:'䷷', summary:'旅・放浪。異国の旅人。謙虚に礼節を守れ。', interpretation:'放浪の時。土地勘のない環境では謙虚に慎重に行動せよ。'},
+    { num:57, name:'巽',  reading:'そん',  en:'The Gentle',      char:'☴', unicode:'䷸', summary:'風・柔順。徐々に浸透する。正しき方向に吹け。', interpretation:'柔和な浸透の時。風のように繰り返し影響を与え続けよ。'},
+    { num:58, name:'兌',  reading:'だ',    en:'The Joyous',      char:'☱', unicode:'䷹', summary:'悦び・喜び。沢の喜び。真の喜びは内から生まれる。', interpretation:'喜びと交流の時。誠実な喜びで人々をつなぎ前進せよ。'},
+    { num:59, name:'渙',  reading:'かん',  en:'Dispersion',      char:'☴', unicode:'䷺', summary:'散乱・溶解。凝り固まりを解く。聖なる集まりで統一を。', interpretation:'分散した力を再統一する時。精神的な絆で人々を集めよ。'},
+    { num:60, name:'節',  reading:'せつ',  en:'Limitation',      char:'☵', unicode:'䷻', summary:'節制・制限。節度ある限界。厳しすぎない節制が吉。', interpretation:'節制の時。自らに適切な制限を設け、節度を守って進め。'},
+    { num:61, name:'中孚', reading:'ちゅうふ',en:'Inner Truth',  char:'☴', unicode:'䷼', summary:'内なる誠実。心の真実。誠実さが全てを動かす。', interpretation:'内面の誠実さが最大の力となる。真実の心で人を動かせ。'},
+    { num:62, name:'小過', reading:'しょうか',en:'Small Exceeding', char:'☳', unicode:'䷽', summary:'小さな超過。鳥が飛びすぎる。慎み深く小事を行え。', interpretation:'小さな超過は許されるが大事は控えよ。謙虚に小歩を積め。'},
+    { num:63, name:'既済', reading:'きせい',en:'After Completion', char:'☵', unicode:'䷾', summary:'完成・達成。全てが完了した。しかし次の崩壊に備えよ。', interpretation:'完成の時。しかし慢心は禁物。次の崩壊に備え秩序を保て。'},
+    { num:64, name:'未済', reading:'みせい',en:'Before Completion', char:'☲', unicode:'䷿', summary:'未完成・移行期。渡る前の最後の一歩。慎重に完成へ。', interpretation:'完成直前の最も危険な時。最後まで油断せず慎重に進め。'},
+  ];
+
+  // King Wen sequence mapping: upper trigram * 8 + lower trigram -> hexagram index
+  // Trigrams: ☰=0,☱=1,☲=2,☳=3,☴=4,☵=5,☶=6,☷=7
+  // King Wen sequence (hex number by upper/lower trigram combo)
+  // Using standard lookup table
+  const TRIGRAM_TO_HEX = [
+  //lower: 0  1  2  3  4  5  6  7
+           1, 43,14,34, 9, 5,26,11, // upper 0 (☰)
+          10, 58,38,54,61,60,41,19, // upper 1 (☱)
+          13,49,30,55,37,63,22,36, // upper 2 (☲)
+          25,17,21,51,42,3,27,24,  // upper 3 (☳)
+          44,28,50,32,57,48,18,46, // upper 4 (☴)
+           6,47,64,40,59,29,4,7,  // upper 5 (☵)
+          33,31,56,62,53,39,52,15, // upper 6 (☶)
+          12,45,35,16,20, 8,23, 2, // upper 7 (☷)
+  ];
+
+  const TRIGRAM_NAMES = ['☰ 乾','☱ 兌','☲ 離','☳ 震','☴ 巽','☵ 坎','☶ 艮','☷ 坤'];
+
+  // =====================
+  // STATE
+  // =====================
+  // Each throw result: { heads (0-3), lineType: 'oldYang'|'youngYang'|'youngYin'|'oldYin', changing: bool, yang: bool }
+  let throws = [];
+  let done = false;
+
+  // Line type from coin throws:
+  // 3 heads (表) = old yang (changing yang)  value=9
+  // 2 heads 1 tail = young yang              value=8 (wait, standard: 3H=9=老陽, 2H=8=少陰??)
+  // Actually: standard 3-coin method:
+  // heads=3 (all H) → old yang (老陽, 9) → yang line, changing
+  // heads=2 (2H+1T) → young yang (少陽, 7) → yang line
+  // heads=1 (1H+2T) → young yin (少陰, 8) → yin line
+  // heads=0 (all T) → old yin (老陰, 6) → yin line, changing
+  // Note: coin=head=3pts, tail=2pts → sum: HHH=9, HHT=8, HTT=7, TTT=6
+  // Let's use this:
+  // 3 heads → sum=9=old yang → yang, changing
+  // 2 heads → sum=8=young yin → yin (NOT changing)  ← Note this is "young yin" = yin line
+  // 1 head  → sum=7=young yang → yang (NOT changing) ← "young yang" = yang line
+  // 0 heads → sum=6=old yin → yin, changing
+
+  function throwCoins() {
+    // Simulate 3 coin flips
+    const flips = [Math.random() < 0.5, Math.random() < 0.5, Math.random() < 0.5];
+    const heads = flips.filter(Boolean).length;
+
+    let yang, changing, typeName, typeJP;
+    if (heads === 3) {
+      yang = true; changing = true;
+      typeName = 'Old Yang (老陽)'; typeJP = '老陽 ━━ ×';
+    } else if (heads === 2) {
+      yang = false; changing = false;
+      typeName = 'Young Yin (少陰)'; typeJP = '少陰 ━ ━';
+    } else if (heads === 1) {
+      yang = true; changing = false;
+      typeName = 'Young Yang (少陽)'; typeJP = '少陽 ━━';
+    } else {
+      yang = false; changing = true;
+      typeName = 'Old Yin (老陰)'; typeJP = '老陰 ━ ━ ×';
+    }
+
+    return { flips, heads, yang, changing, typeName, typeJP };
+  }
+
+  function getLinesAsLines(throwArr) {
+    // Returns array from bottom (line 1) to top (line 6)
+    return throwArr.map(t => ({ yang: t.yang, changing: t.changing }));
+  }
+
+  function linesTo3BitTrigram(lines) {
+    // lines[0]=bottom, lines[1]=middle, lines[2]=top → 3-bit (top<<2|mid<<1|bot)
+    // Standard trigram encoding: ☰=111=7? Let's use: bit2=top, bit1=mid, bit0=bot
+    // 0=000: ☷ 坤, 1=001: ☳ 震, 2=010: ☵ 坎, 3=011: ☶ 艮, 4=100: ☴ 巽, 5=101: ☲ 離, 6=110: ☱ 兌, 7=111: ☰ 乾
+    // But King Wen uses: ☰=0,☱=1,☲=2,☳=3,☴=4,☵=5,☶=6,☷=7
+    // Map bit pattern to King Wen index:
+    const bit = (lines[2].yang ? 4 : 0) | (lines[1].yang ? 2 : 0) | (lines[0].yang ? 1 : 0);
+    // bit pattern to King Wen index
+    const bitToKW = [7, 3, 5, 6, 4, 2, 1, 0]; // 000→☷(7), 001→☳(3), 010→☵(5), 011→☶(6), 100→☴(4), 101→☲(2), 110→☱(1), 111→☰(0)
+    return bitToKW[bit];
+  }
+
+  function computeHexagram(lines) {
+    // lines: array of 6, bottom to top
+    const lower = linesTo3BitTrigram(lines.slice(0, 3));
+    const upper = linesTo3BitTrigram(lines.slice(3, 6));
+    const hexNum = TRIGRAM_TO_HEX[upper * 8 + lower];
+    return { hexNum, lower, upper };
+  }
+
+  function computeChangedHexagram(lines) {
+    // Flip changing lines
+    const changed = lines.map(l => ({ ...l, yang: l.changing ? !l.yang : l.yang, changing: false }));
+    const lower = linesTo3BitTrigram(changed.slice(0, 3));
+    const upper = linesTo3BitTrigram(changed.slice(3, 6));
+    const hexNum = TRIGRAM_TO_HEX[upper * 8 + lower];
+    return { hexNum, lower, upper, lines: changed };
+  }
+
+  // =====================
+  // RENDER
+  // =====================
+  function updateThrowUI() {
+    const count = throws.length + 1;
+    const remaining = 6 - throws.length;
+    document.getElementById('throwCount').textContent = count > 6 ? 6 : count;
+    document.getElementById('remaining').textContent = remaining >= 0 ? remaining : 0;
+
+    // Render history
+    const hist = document.getElementById('throwHistory');
+    hist.innerHTML = '';
+    throws.forEach((t, i) => {
+      const div = document.createElement('div');
+      div.className = 'throw-result flex items-center gap-3 p-2 rounded-lg bg-black bg-opacity-30';
+
+      const label = document.createElement('span');
+      label.className = 'text-xs text-amber-700 w-14 flex-shrink-0';
+      label.textContent = `第${i + 1}爻:`;
+
+      const coins = document.createElement('span');
+      coins.className = 'flex gap-1';
+      t.flips.forEach(h => {
+        const c = document.createElement('span');
+        c.className = 'coin-toss-mini ' + (h ? 'bg-yellow-800 text-yellow-200' : 'bg-gray-700 text-gray-400');
+        c.textContent = h ? '表' : '裏';
+        coins.appendChild(c);
+      });
+
+      const typEl = document.createElement('span');
+      typEl.className = 'text-xs font-semibold ' + (t.changing ? 'text-red-400' : 'text-amber-300');
+      typEl.textContent = t.typeJP;
+
+      div.appendChild(label);
+      div.appendChild(coins);
+      div.appendChild(typEl);
+      hist.appendChild(div);
+    });
+  }
+
+  function renderHexagramVisual(lines, panelId, title, hexData) {
+    const hex = HEXAGRAMS.find(h => h.num === hexData.hexNum) || HEXAGRAMS[0];
+    const panel = document.getElementById(panelId);
+    panel.classList.remove('hidden');
+    panel.innerHTML = '';
+
+    // Title
+    const h2 = document.createElement('h2');
+    h2.className = 'text-center text-yellow-400 font-bold text-lg mb-4';
+    h2.style.fontFamily = 'Georgia, serif';
+    h2.textContent = title;
+    panel.appendChild(h2);
+
+    const grid = document.createElement('div');
+    grid.className = 'flex flex-col md:flex-row gap-6 items-center md:items-start';
+
+    // Left: hexagram visual (lines from top to bottom visually = line 6 at top)
+    const visualDiv = document.createElement('div');
+    visualDiv.className = 'flex flex-col items-center gap-1 w-40 flex-shrink-0';
+
+    // Hexagram character
+    const charEl = document.createElement('div');
+    charEl.className = 'hexagram-char text-yellow-300 mb-3';
+    charEl.setAttribute('aria-label', `六十四卦第${hex.num}卦 ${hex.name}`);
+    charEl.textContent = hex.unicode;
+    visualDiv.appendChild(charEl);
+
+    // Draw lines (top to bottom = line 6 to line 1 visually)
+    for (let i = 5; i >= 0; i--) {
+      const line = lines[i];
+      const lineDiv = document.createElement('div');
+      lineDiv.className = 'w-32 ' + (line.changing ? 'line-changing' : '');
+      lineDiv.setAttribute('aria-label', `第${i + 1}爻 ${line.yang ? '陽' : '陰'}${line.changing ? '変爻' : ''}`);
+
+      if (line.yang) {
+        const bar = document.createElement('div');
+        bar.className = 'line-yang';
+        lineDiv.appendChild(bar);
+      } else {
+        const yin = document.createElement('div');
+        yin.className = 'line-yin';
+        const h1 = document.createElement('div');
+        h1.className = 'half';
+        const h2d = document.createElement('div');
+        h2d.className = 'half';
+        yin.appendChild(h1);
+        yin.appendChild(h2d);
+        lineDiv.appendChild(yin);
+      }
+
+      if (line.changing) {
+        const mark = document.createElement('span');
+        mark.className = 'mark';
+        mark.textContent = '← 変';
+        lineDiv.appendChild(mark);
+      }
+
+      visualDiv.appendChild(lineDiv);
+    }
+
+    // Line numbers (bottom to top)
+    const numDiv = document.createElement('div');
+    numDiv.className = 'flex flex-col-reverse items-center text-xs text-amber-800 mt-1 gap-1';
+    for (let i = 1; i <= 6; i++) {
+      const s = document.createElement('span');
+      s.style.height = '20px';
+      s.style.lineHeight = '20px';
+      s.textContent = `第${i}爻`;
+      numDiv.appendChild(s);
+    }
+
+    grid.appendChild(visualDiv);
+
+    // Right: hexagram info
+    const infoDiv = document.createElement('div');
+    infoDiv.className = 'flex-1 min-w-0';
+
+    const numEl = document.createElement('div');
+    numEl.className = 'text-amber-600 text-xs mb-1';
+    numEl.textContent = `第${hex.num}卦`;
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'text-yellow-200 text-3xl font-bold mb-1';
+    nameEl.style.fontFamily = 'Georgia, serif';
+    nameEl.textContent = `${hex.name}（${hex.reading}）`;
+
+    const enEl = document.createElement('div');
+    enEl.className = 'text-amber-500 text-sm italic mb-3';
+    enEl.textContent = hex.en;
+
+    const trigramEl = document.createElement('div');
+    trigramEl.className = 'text-xs text-amber-700 mb-3';
+    trigramEl.textContent = `上卦: ${TRIGRAM_NAMES[hexData.upper]} ／ 下卦: ${TRIGRAM_NAMES[hexData.lower]}`;
+
+    const summaryEl = document.createElement('p');
+    summaryEl.className = 'text-amber-300 text-sm mb-2 leading-relaxed';
+    summaryEl.textContent = hex.summary;
+
+    const interpLabel = document.createElement('p');
+    interpLabel.className = 'text-xs text-amber-700 mb-1 font-bold uppercase tracking-wider';
+    interpLabel.textContent = '解釈 (Interpretation)';
+
+    const interpEl = document.createElement('p');
+    interpEl.className = 'text-amber-100 text-sm leading-relaxed bg-black bg-opacity-30 rounded-lg p-3';
+    interpEl.textContent = hex.interpretation;
+
+    infoDiv.appendChild(numEl);
+    infoDiv.appendChild(nameEl);
+    infoDiv.appendChild(enEl);
+    infoDiv.appendChild(trigramEl);
+    infoDiv.appendChild(summaryEl);
+    infoDiv.appendChild(interpLabel);
+    infoDiv.appendChild(interpEl);
+
+    grid.appendChild(infoDiv);
+    panel.appendChild(grid);
+  }
+
+  function handleCast() {
+    if (done || throws.length >= 6) return;
+
+    const btn = document.getElementById('castBtn');
+    btn.classList.add('casting');
+    setTimeout(() => btn.classList.remove('casting'), 600);
+
+    const result = throwCoins();
+    throws.push(result);
+    updateThrowUI();
+
+    if (throws.length === 6) {
+      done = true;
+      btn.disabled = true;
+      document.getElementById('throwCount').textContent = '完了';
+      document.getElementById('remaining').textContent = '0';
+
+      const lines = getLinesAsLines(throws);
+      const hexData = computeHexagram(lines);
+      renderHexagramVisual(lines, 'hexagramPanel', '卦の結果 (Primary Hexagram)', hexData);
+
+      const hasChanging = lines.some(l => l.changing);
+      if (hasChanging) {
+        const changedData = computeChangedHexagram(lines);
+        const changedLines = lines.map(l => ({ yang: l.changing ? !l.yang : l.yang, changing: false }));
+        renderHexagramVisual(changedLines, 'changedPanel', '変爻後の卦 (Changed Hexagram)', changedData);
+      }
+    }
+  }
+
+  // =====================
+  // INIT
+  // =====================
+  document.getElementById('castBtn').addEventListener('click', handleCast);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      if (document.activeElement.tagName !== 'BUTTON') {
+        handleCast();
+      }
+    }
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    throws = [];
+    done = false;
+    document.getElementById('castBtn').disabled = false;
+    document.getElementById('throwCount').textContent = '1';
+    document.getElementById('remaining').textContent = '6';
+    document.getElementById('throwHistory').innerHTML = '';
+    document.getElementById('hexagramPanel').classList.add('hidden');
+    document.getElementById('changedPanel').classList.add('hidden');
+  });
+
+  updateThrowUI();
+</script>
+</body>
+</html>
